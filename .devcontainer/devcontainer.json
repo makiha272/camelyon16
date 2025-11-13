@@ -1,0 +1,31 @@
+{
+    "name": "CUDA12.6 + PyTorch",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": ".."
+    },
+    "runArgs": [
+        "--gpus",
+        "all",
+        "--shm-size=1g"
+    ],
+    "workspaceFolder": "/workspace",
+    "remoteUser": "root",
+    "mounts": [
+        // workspace(.devcontainerがあるフォルダ)をバインドマウントして同期
+        "source=${localWorkspaceFolder},target=/workspace,type=bind",
+        // HuggingFaceのデータが格納されるキャッシュフォルダをバインドマウント
+        "source=${localEnv:HOME}/.cache/huggingface,target=/root/.cache/huggingface,type=bind",
+        // PyTorchのデータが格納されるキャッシュフォルダをバインドマウント
+        "source=${localEnv:HOME}/.cache/torch,target=/root/.cache/torch,type=bind"
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-toolsai.jupyter",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    }
+}
