@@ -11,3 +11,13 @@ wheels/
 
 #image
 data/
+
+#uv
+*.lock
+
+#marimo
+*/__marimo__/
+
+#slideflow_project
+slideflow_project/
+slideflow.log
