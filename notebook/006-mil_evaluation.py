@@ -18,7 +18,7 @@ def _():
     import slideflow as sf
     import matplotlib.pyplot as plt
     import pandas as pd
-    return mo, pd, sf
+    return (sf,)
 
 
 @app.cell
@@ -29,104 +29,51 @@ def _(sf):
 
 
 @app.cell
-def _(dataset):
-    train_dataset, valid_dataset = dataset.split(
-        model_type='classification', # Categorical labels
-        labels='category',            # Label to balance between datasets
-        val_strategy='fixed',          # Fixed split strategy
-        val_fraction=0.4,             # 20% of data for testing
-        splits='/workspace/slideflow_project/splits.json'         # Where to save/load crossfold splits
-    )
-    return train_dataset, valid_dataset
-
-
-@app.cell
-def _():
-    from slideflow.mil import mil_config
-    config = mil_config(
-        model='attention_mil',
-        lr=1e-4,
-        batch_size=2,
-        epochs=10,
-        fit_one_cycle=True
-    )
-    return (config,)
-
-
-@app.cell
-def _(config, train_dataset, valid_dataset):
-    from slideflow.mil import train_mil
-    train_mil(
-        config,
-        train_dataset=train_dataset,
-        val_dataset=valid_dataset,
+def _(P, dataset):
+    df = P.evaluate_mil(
+        model='/workspace/slideflow_project/models/00002-attention_mil-category',
         outcomes='category',
+        dataset=dataset,
         bags='/workspace/slideflow_project/bags',
-        outdir='/workspace/slideflow_project/models'
+        attention_heatmaps=True
     )
     return
 
 
 @app.cell
-def _(pd):
-    df = pd.read_parquet("/workspace/slideflow_project/models/00002-attention_mil-category/predictions.parquet")
-    df
-    return
+def _(dataset, sf):
+    import numpy as np
+    from pathlib import Path
+    from slideflow.mil.eval import generate_attention_heatmaps
 
+    model_dir = Path('/workspace/slideflow_project/mil_eval/00002-attention_mil')
+    att_dir = model_dir / 'attention'
 
-@app.cell
-def _(mo):
-    mo.md(r"""
-    # Training
-    """)
-    return
+    # Find bags used by the model and build y_att in the same order
+    bags = dataset.get_bags('/workspace/slideflow_project/bags')
+    bag_map = {sf.util.path_to_name(b): b for b in bags}
 
+    slides_to_process = []
+    for f in sorted(att_dir.iterdir()):
+        slidename = f.name.split('_att')[0]
+        if slidename in bag_map:
+            slides_to_process.append(slidename)
 
-@app.cell
-def _(sf):
-    hp = sf.ModelParams(
-        tile_px=256,
-        tile_um='10x',
-        epochs=list(range(1, 6)), #5エポック
-        model='resnet18',
-        loss='CrossEntropy',
-        optimizer='Adam',
-        learning_rate=0.0001,
-        batch_size=128,
-        early_stop=True,
-        early_stop_patience=3,
-        dropout=0.5,
-        # augment='xyrn',
-        # normalizer='macenko'
-    )
-    return (hp,)
+    bags_to_use = [bag_map[s] for s in slides_to_process]
+    y_att = []
+    for s in slides_to_process:
+        f = att_dir / f'{s}_att.npz'
+        if not f.exists():
+            f = att_dir / f'{s}_att.npy'
+        data = np.load(f)
+        if hasattr(data, 'files') and len(data.files):
+            arr = data[data.files[0]]
+        else:
+            arr = data
+        y_att.append(arr)
 
-
-@app.cell
-def _(P, hp):
-    results = P.train(
-      outcomes="category",
-      params=hp,
-      filters={"category": ["tumor", "normal"]},
-      val_strategy="fixed",
-      val_fraction=0.2,
-      use_tensorboard=True
-    )
-    return
-
-
-@app.cell
-def _(P):
-    dfs = P.predict(
-      model="/workspace/slideflow_project/models/00005-category-HP0/category-HP0_epoch5.zip",
-      filters={"category": ["test"]}
-    )
-    return (dfs,)
-
-
-@app.cell
-def _(dfs):
-    dfs
+    outdir = str(model_dir / 'heatmaps')
+    generate_attention_heatmaps(outdir=outdir, dataset=dataset, bags=bags_to_use, attention=y_att, interpolation='bicubic', cmap='inferno')
     return
 
 
