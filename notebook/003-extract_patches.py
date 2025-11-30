@@ -8,7 +8,7 @@
 
 import marimo
 
-__generated_with = "0.18.0"
+__generated_with = "0.18.1"
 app = marimo.App(width="medium")
 
 
@@ -26,7 +26,7 @@ def _(sf):
     # P = sf.create_project(
     #   root='/workspace/slideflow_project',
     #   annotations="./annotations.csv",
-    #   slides='/workspace/data/images/'
+    #   slides='/workspace/dataset/camelyon16/images/'
     # )
     P = sf.load_project("/workspace/slideflow_project")
     return (P,)
@@ -34,7 +34,7 @@ def _(sf):
 
 @app.cell
 def _(P):
-    dataset = P.dataset(tile_px=256, tile_um='10x')
+    dataset_all = P.dataset(tile_px=224, tile_um='10x')
     return
 
 

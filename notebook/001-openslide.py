@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.17.7"
+__generated_with = "0.18.1"
 app = marimo.App(width="medium")
 
 
@@ -14,7 +14,7 @@ def _():
 
 @app.cell
 def _(openslide):
-    slide = openslide.OpenSlide("/workspace/data/images/tumor_016.tif")
+    slide = openslide.OpenSlide("/workspace/dataset/camelyon16/images/tumor_016.tif")
     print(slide.dimensions)  # (width, height)
     print(slide.level_count) # 解像度レベル数
     return (slide,)
@@ -36,7 +36,8 @@ def _(slide):
 
 @app.cell
 def _(
-    data,
+    camelyon16,
+    dataset,
     deepzoom,
     deepzoom_server,
     examples,
@@ -47,7 +48,7 @@ def _(
     tumor_016,
     workspace,
 ):
-    python /root/openslide-python/examples/deepzoom/deepzoom_server.py /workspace/data/images/tumor_016.tif
+    python /root/openslide-python/examples/deepzoom/deepzoom_server.py /workspace/dataset/camelyon16/images/tumor_016.tif
     return
 
 

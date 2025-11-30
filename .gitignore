@@ -10,7 +10,7 @@ wheels/
 .venv
 
 #image
-data/
+dataset/*
 
 #uv
 *.lock
