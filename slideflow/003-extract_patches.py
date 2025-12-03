@@ -29,7 +29,8 @@ def _(sf):
 
 @app.cell
 def _(P):
-    dataset = P.dataset(tile_px=224, tile_um='10x', filters={"sample": "True"})
+    dataset = P.dataset(tile_px=224, tile_um='10x')
+    # dataset = P.dataset(tile_px=224, tile_um='10x', filters={"sample": "True"})
     return (dataset,)
 
 
@@ -48,6 +49,11 @@ def _(sf):
 @app.cell
 def _(plt, sf, tfr):
     plt.imshow(sf.io.decode_image(tfr[1]['image_raw']))
+    return
+
+
+@app.cell
+def _():
     return
 
 

@@ -31,7 +31,7 @@ def _(sf):
 @app.cell
 def _(P, dataset):
     df = P.evaluate_mil(
-        model='/workspace/slideflow_project/models/00002-attention_mil-category',
+        model='/workspace/slideflow_project/models/00008-attention_mil-category',
         outcomes='category',
         dataset=dataset,
         bags='/workspace/slideflow_project/bags',

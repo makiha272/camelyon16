@@ -24,7 +24,8 @@ def _():
 @app.cell
 def _(sf):
     P = sf.load_project("/workspace/slideflow_project")
-    dataset = P.dataset(tile_px=224, tile_um='10x', filters={"sample": "True"})
+    dataset = P.dataset(tile_px=224, tile_um='10x')
+    # dataset = P.dataset(tile_px=224, tile_um='10x', filters={"sample": "True"})
     return P, dataset
 
 
@@ -37,6 +38,11 @@ def _(P, dataset, sf):
         dataset=dataset,
         outdir='/workspace/slideflow_project/bags'
     )
+    return
+
+
+@app.cell
+def _():
     return
 
 
