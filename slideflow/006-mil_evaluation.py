@@ -8,7 +8,7 @@
 
 import marimo
 
-__generated_with = "0.18.1"
+__generated_with = "0.18.2"
 app = marimo.App(width="medium")
 
 
@@ -24,7 +24,7 @@ def _():
 @app.cell
 def _(sf):
     P = sf.load_project("/workspace/slideflow_project")
-    dataset = P.dataset(tile_px=224, tile_um='10x', filters={"sample": "True"})
+    dataset = P.dataset(tile_px=224, tile_um='10x', filters={"category": ["tumor"]})
     return P, dataset
 
 
@@ -46,7 +46,7 @@ def _(dataset, sf):
     from pathlib import Path
     from slideflow.mil.eval import generate_attention_heatmaps
 
-    model_dir = Path('/workspace/slideflow_project/mil_eval/00002-attention_mil')
+    model_dir = Path('/workspace/slideflow_project/mil_eval/00004-attention_mil')
     att_dir = model_dir / 'attention'
 
     # Find bags used by the model and build y_att in the same order

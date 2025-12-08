@@ -16,8 +16,11 @@ RUN apt-get update && \
     git curl wget vim build-essential \
     libglib2.0-0 libgl1-mesa-glx \
     openslide-tools libvips-tools \
+    openjdk-17-jdk-headless \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH="$JAVA_HOME/bin:${PATH}"
 
 # ------------------------------------------------------------
 # uv のインストール

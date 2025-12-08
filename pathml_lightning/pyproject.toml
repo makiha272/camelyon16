@@ -1,0 +1,17 @@
+[project]
+name = "camelyon16"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ipython>=8.37.0",
+    "ipywidgets>=8.1.7",
+    "jupyter>=1.1.1",
+    "jupyterlab>=4.4.10",
+    "marimo>=0.17.7",
+    "matplotlib>=3.10.7",
+    "numpy<2",
+    "openslide-python>=1.4.2",
+    "pathml>=2.1.1",
+]

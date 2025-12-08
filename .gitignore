@@ -21,3 +21,5 @@ dataset/*
 #slideflow_project
 slideflow_project/
 slideflow.log
+
+scratch/
