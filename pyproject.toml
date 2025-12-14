@@ -23,12 +23,14 @@ dependencies = [
     "pytorch-lightning>=2.5.5",
     "seaborn>=0.13.2",
     "slideflow>=3.0.2",
+    "streamlit>=1.52.1",
     "tensorboard>=2.20.0",
     "tensorboardx>=2.6.4",
     "tfrecord>=1.14.6",
     "torch>=2.9.0",
     "torchvision>=0.24.0",
     "tqdm>=4.67.1",
+    "transformers>=4.57.3",
     "wandb>=0.22.3",
 ]
 

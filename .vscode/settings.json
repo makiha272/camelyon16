@@ -1,3 +1,12 @@
 {
     "python.defaultInterpreterPath": "/workspace/venvs/pathml_lightning/bin/python",
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
+            "source.organizeImports": "explicit"
+        },
+    },
+    "notebook.formatOnSave.enabled": true,
 }
