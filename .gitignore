@@ -23,3 +23,5 @@ slideflow_project/
 slideflow.log
 
 scratch/
+
+lightning_logs/

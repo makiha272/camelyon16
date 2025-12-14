@@ -21,6 +21,9 @@ def _():
     from torchmetrics.functional import accuracy, precision, recall, f1_score, auroc
     from torch.optim import AdamW
     import pytorch_lightning as pl
+    from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
+    from pytorch_lightning.loggers import TensorBoardLogger
+    from pytorch_lightning import Trainer
 
     from utils.sf2torch import DatasetFromSlideFlow
     from utils.mil_lightning import MILDataModule
@@ -29,10 +32,15 @@ def _():
         Any,
         DatasetFromSlideFlow,
         Dict,
+        EarlyStopping,
         F,
+        LearningRateMonitor,
         List,
         MILDataModule,
+        ModelCheckpoint,
         Optional,
+        TensorBoardLogger,
+        Trainer,
         Tuple,
         Union,
         accuracy,
@@ -69,13 +77,8 @@ def _(DatasetFromSlideFlow, MILDataModule, sf):
     valid_torch_dataset = DatasetFromSlideFlow(valid_sf_dataset)
     test_torch_dataset = DatasetFromSlideFlow(test_sf_dataset)
 
-    data_module = MILDataModule(train_torch_dataset, valid_torch_dataset, test_torch_dataset, batch_size=4, num_workers=2)
-    return (
-        data_module,
-        test_torch_dataset,
-        train_torch_dataset,
-        valid_torch_dataset,
-    )
+    data_module = MILDataModule(train_torch_dataset, valid_torch_dataset, test_torch_dataset, batch_size=4, num_workers=4)
+    return (data_module,)
 
 
 @app.cell
@@ -83,7 +86,7 @@ def _(F, nn, torch):
     class AttentionMIL(nn.Module):
         def __init__(self, embed_dim, attn_dim, output_dim, dropout_rate=0.5):
             super().__init__()
-        
+
             # V: tanch branch
             self.V = nn.Sequential(
                 nn.Linear(embed_dim, attn_dim),
@@ -95,7 +98,7 @@ def _(F, nn, torch):
                 nn.Linear(embed_dim, attn_dim),
                 nn.Sigmoid()
             )   
-        
+
             # W: Attention係数 (A) の線形変換
             self.W = nn.Sequential(
                 nn.Linear(attn_dim, 1),
@@ -118,35 +121,35 @@ def _(F, nn, torch):
             A_raw = self.W(VU)     # (N_total, 1)
 
             # バッグごとの集約とAttentionの適用 (重要部分)
-        
+
             # X_totalとA_rawをバッグごとに分割するためのオフセットを作成
             # cumsum(N_sizes) は各バッグの終了インデックスを示す
-        
+
             all_bag_representations = []
             all_bag_attentions = []
             start_idx = 0
 
             for i, N_i in enumerate(N_sizes):
                 end_idx = start_idx + N_i.item()
-            
+
                 H_i = X_total[start_idx:end_idx]  # (N_i, embed_dim) - i番目のバッグのインスタンス特徴
                 A_i_raw = A_raw[start_idx:end_idx] # (N_i, 1) - i番目のバッグのAttentionスコア
-            
+
                 # Attentionスコアのsoftmax正規化
                 A_i = F.softmax(A_i_raw, dim=0) # Attention weights: (N_i, 1)
 
                 # Attention Weighted Bag Representation: (1, embed_dim)
                 # Z = A^T * H_i
                 Z_i = torch.transpose(A_i, 0, 1) @ H_i # (1, N_i) @ (N_i, embed_dim) -> (1, embed_dim)
-            
+
                 all_bag_representations.append(Z_i.squeeze(0))
                 all_bag_attentions.append(A_i.squeeze(-1)) # (N_i,)
-            
+
                 start_idx = end_idx # 次のバッグの開始インデックスを更新
 
             Z_batch = torch.stack(all_bag_representations, dim=0)  # すべてのバッグ表現をスタック: (B, attn_dim)
             A_batch = all_bag_attentions  # リスト of (N_i,) tensors
-        
+
             Z_batch = self.dropout(Z_batch)
 
             # 4. バッグレベルの分類
@@ -157,21 +160,21 @@ def _(F, nn, torch):
 
 
 @app.cell
-def _(AttentionMIL, data_module):
-    dl = data_module.train_dataloader()
-    X_total, N_sizes, Y_labels = next(iter(dl))
+def _():
+    # dl = data_module.train_dataloader()
+    # X_total, N_sizes, Y_labels = next(iter(dl))
 
-    # モデルのインスタンス化
-    embed_dim = 2048
-    attn_dim = 256
-    output_dim = 1
-    model = AttentionMIL(embed_dim, attn_dim, output_dim, dropout_rate=0.5)
+    # # モデルのインスタンス化
+    # embed_dim = 2048
+    # attn_dim = 256
+    # output_dim = 1
+    # model = AttentionMIL(embed_dim, attn_dim, output_dim, dropout_rate=0.5)
 
-    # モデルの使用例 (forward pass)
-    Y_logits, Z_batch, A_batch = model(X_total, N_sizes).values()
+    # # モデルの使用例 (forward pass)
+    # Y_logits, Z_batch, A_batch = model(X_total, N_sizes).values()
 
-    print(f"\nモデルの出力の形状 (Y_logits): {Y_logits.shape}")
-    print(f"集約されたバッグ表現の形状 (Z_batch): {Z_batch.shape}")
+    # print(f"\nモデルの出力の形状 (Y_logits): {Y_logits.shape}")
+    # print(f"集約されたバッグ表現の形状 (Z_batch): {Z_batch.shape}")
     return
 
 
@@ -245,7 +248,7 @@ def _(
             """
             out = self.attention_mil(X_total=X_total, N_sizes=N_sizes)  # bag_rep, attn, H
             logits = out["logits"]
-            bag_reprsentations = out["bag_repr"]
+            bag_reprsentations = out["bag_representation"]
             attention = out["attention"]
 
             if self.num_classes == 1:
@@ -299,7 +302,7 @@ def _(
             """
             精度 (accuracy)、適合率 (precision)、再現率 (recall)、F1スコア (f1-score) を計算します。
             torchmetrics を使用します
-        
+
             Args:
                 logits (torch.Tensor): モデルの出力（ロジット）。
                 y (torch.Tensor): 真のラベル。
@@ -307,10 +310,10 @@ def _(
             Returns:
                 dict: 各評価指標を含む辞書。
             """
-        
+
             # 結果を格納するための辞書
             metrics = {}
-        
+
             # 1. 予測値の準備
             if self.num_classes > 2:
                 # multi-class
@@ -329,29 +332,29 @@ def _(
                 assert y.ndim == 2, "For binary classification, y should be of shape [B, 1]"
                 y = y.long() # binary→クラスインデックス(long)を渡す
                 num_classes = 1
-        
+
             # 2. 評価指標の計算 (torchmetrics.functional を使用)
             # Accuracy
             metrics['accuracy'] = accuracy(
                 preds_for_metrics, y, task=task, num_classes=num_classes
             )
-        
+
             # Precision (適合率)
             # 多クラス分類では、通常 'macro' 平均が利用されます。
             metrics['precision'] = precision(
                 preds_for_metrics, y, task=task, num_classes=num_classes, average='macro'
             )
-        
+
             # Recall (再現率)
             metrics['recall'] = recall(
                 preds_for_metrics, y, task=task, num_classes=num_classes, average='macro'
             )
-        
+
             # F1-score (F1スコア)
             metrics['f1-score'] = f1_score(
                 preds_for_metrics, y, task=task, num_classes=num_classes, average='macro'
             )
-        
+
             # 参考: AUC (二値・多クラス対応)
             try:
                 metrics['auroc'] = auroc(
@@ -374,6 +377,7 @@ def _(
                 Y_labels: [B] or [B, 1]
             """
             X_total, N_sizes, Y_labels = batch
+            batch_size = Y_labels.shape[0]  # バッグの数 = バッチサイズ
 
             out = self(X_total=X_total, N_sizes=N_sizes)
             logits = out["logits"]
@@ -381,17 +385,18 @@ def _(
             loss = self._compute_loss(logits=logits, y=Y_labels)
             metrics = self._compute_metrics(logits=logits, y=Y_labels)
 
-            self.log("train_loss", loss, prog_bar=True, on_step=True, on_epoch=True)
-            self.log("train_accuracy", metrics["accuracy"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("train_precision", metrics["precision"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("train_recall", metrics["recall"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("train_f1-score", metrics["f1-score"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("train_auroc", metrics["auroc"], prog_bar=True, on_step=True, on_epoch=True)
+            self.log("train_loss", loss, prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("train_accuracy", metrics["accuracy"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("train_precision", metrics["precision"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("train_recall", metrics["recall"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("train_f1-score", metrics["f1-score"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("train_auroc", metrics["auroc"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
 
             return loss
 
         def validation_step(self, batch: Tuple, batch_idx: int) -> None:
             X_total, N_sizes, Y_labels = batch
+            batch_size = Y_labels.shape[0]  # バッグの数 = バッチサイズ
 
             out = self(X_total=X_total, N_sizes=N_sizes)
             logits = out["logits"]
@@ -399,14 +404,16 @@ def _(
             loss = self._compute_loss(logits=logits, y=Y_labels)
             metrics = self._compute_metrics(logits=logits, y=Y_labels)
 
-            self.log("val_loss", loss, prog_bar=True, on_step=True, on_epoch=True)
-            self.log("val_accuracy", metrics["accuracy"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("val_precision", metrics["precision"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("val_recall", metrics["recall"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("val_auroc", metrics["auroc"], prog_bar=True, on_step=True, on_epoch=True)
+            self.log("val_loss", loss, prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("val_accuracy", metrics["accuracy"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("val_precision", metrics["precision"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("val_recall", metrics["recall"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("val_f1-score", metrics["f1-score"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("val_auroc", metrics["auroc"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
 
         def test_step(self, batch: Tuple, batch_idx: int) -> None:
             X_total, N_sizes, Y_labels = batch
+            batch_size = Y_labels.shape[0]  # バッグの数 = バッチサイズ
 
             out = self(X_total=X_total, N_sizes=N_sizes)
             logits = out["logits"]
@@ -414,12 +421,12 @@ def _(
             loss = self._compute_loss(logits=logits, y=Y_labels)
             metrics = self._compute_metrics(logits=logits, y=Y_labels)
 
-            self.log("test_loss", loss, prog_bar=True, on_step=True, on_epoch=True)
-            self.log("test_accuracy", metrics["accuracy"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("test_precision", metrics["precision"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("test_recall", metrics["recall"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("test_f1-score", metrics["f1-score"], prog_bar=True, on_step=True, on_epoch=True)
-            self.log("test_auroc", metrics["auroc"], prog_bar=True, on_step=True, on_epoch=True)
+            self.log("test_loss", loss, prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("test_accuracy", metrics["accuracy"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("test_precision", metrics["precision"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("test_recall", metrics["recall"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("test_f1-score", metrics["f1-score"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
+            self.log("test_auroc", metrics["auroc"], prog_bar=True, on_step=False, on_epoch=True, batch_size=batch_size)
 
         def predict_step(self, batch: Tuple, batch_idx: int, dataloader_idx=0) -> None:
             X_total, N_sizes = batch
@@ -431,14 +438,14 @@ def _(
                 preds = (probs >= 0.5).long() # 二値分類の閾値は0.5とする
             return preds
 
-    def configure_optimizers(self) -> Dict[str, Any]:
+        def configure_optimizers(self) -> Dict[str, Any]:
             # 1. オプティマイザの定義 (AdamW)
             optimizer = AdamW(
                 self.parameters(), 
                 lr=self.hparams.lr, 
                 eps=self.hparams.eps # AdamWでよく使われる小さなepsilon
             )
-        
+
             # 2. スケジューラの定義 (Warmup付き Cosine Annealing)
             scheduler = get_cosine_schedule_with_warmup(
                 optimizer=optimizer,
@@ -446,7 +453,7 @@ def _(
                 num_training_steps=self.hparams.max_steps,
                 num_cycles=0.5, #1.0にするとrestartが入る
             )
-        
+
             # 3. PyTorch Lightningへの返却形式
             # 'scheduler'キーと、スケジューラの動作設定を返します
             return {
@@ -473,23 +480,19 @@ def _(
     AttentionMILLitModule,
     EarlyStopping,
     LearningRateMonitor,
-    MILDataModule,
     ModelCheckpoint,
     TensorBoardLogger,
     Trainer,
-    test_torch_dataset,
+    data_module,
     torch,
-    train_torch_dataset,
-    valid_torch_dataset,
 ):
     # データとモデル
-    data_module = MILDataModule(train_torch_dataset, valid_torch_dataset, test_torch_dataset, batch_size=4, num_workers=2)
     data_module.setup("fit")
     model = AttentionMILLitModule(
         num_classes=2,
         embed_dim=2048,
         attn_dim=256,
-        dropout=0,
+        dropout=0.75,
         lr=1e-4,
         pos_weight=1.0,  # クラス不均衡がある場合に調整
         warmup_steps=500,
@@ -512,7 +515,7 @@ def _(
     early_stop_callback = EarlyStopping(
         monitor="val_loss",      # 監視対象（val_loss）
         mode="min",              # 小さい方が良い
-        patience=3,              # 3エポック連続で改善がなければ終了
+        patience=15,              # 15エポック連続で改善がなければ終了
         verbose=True
     )
 
@@ -524,7 +527,7 @@ def _(
 
     # ====== トレーナー設定 ======
     trainer = Trainer(
-        max_epochs=20,
+        max_epochs=80,
         accelerator="auto",    # GPUが使えるなら自動でGPU
         devices=1 if torch.cuda.is_available() else None,
         precision=16 if torch.cuda.is_available() else 32,  # GPUならFP16高速化
@@ -534,7 +537,12 @@ def _(
 
     # ====== 学習実行 ======
     trainer.fit(model, datamodule=data_module)
-    return (data_module,)
+    return
+
+
+@app.cell
+def _():
+    return
 
 
 if __name__ == "__main__":
